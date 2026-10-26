@@ -1,0 +1,62 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest        # Apple Silicon (M1/M2/M3)
+            arch: arm64
+          - os: macos-15-intel      # Intel
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Check ExifTool
+        run: |
+          chmod +x exiftool_mac/exiftool
+          perl exiftool_mac/exiftool -ver
+
+      - name: Make icon.icns if missing
+        run: |
+          python - <<'EOF'
+          import os
+          from PIL import Image
+          if not os.path.exists("assets/icon.icns"):
+              for name in ("assets/icon.ico", "assets/logo.png"):
+                  if os.path.exists(name):
+                      img = Image.open(name).convert("RGBA")
+                      img = img.resize((512, 512))
+                      img.save("assets/icon.icns")
+                      print("icon from", name)
+                      break
+          EOF
+
+      - name: Build app
+        run: pyinstaller --noconfirm FotoSito-mac.spec
+
+      - name: Zip app
+        run: |
+          cd dist
+          ditto -c -k --keepParent FotoSito.app ../FotoSito-${{ matrix.arch }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FotoSito-${{ matrix.arch }}
+          path: FotoSito-${{ matrix.arch }}.zip
