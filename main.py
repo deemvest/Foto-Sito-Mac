@@ -25,7 +25,7 @@ from PySide6.QtGui import (
     QPixmap, QImage, QPainter, QColor, QFont, QMouseEvent,
     QShortcut, QKeySequence
 )
-from PySide6.QtCore import Qt, QThread, Signal, QObject, QSize, QTimer
+from PySide6.QtCore import Qt, QThread, Signal, QObject, QSize, QTimer, QEvent
 
 from PIL import Image
 import rawpy
@@ -955,6 +955,13 @@ class MainWindow(QMainWindow):
         if self.current_folder and self.thumbnail_widgets:
             self._relayout_visible()
 
+    def closeEvent(self, event):
+        """Перед закрытием гасим фоновую загрузку миниатюр.
+        Иначе QThread уничтожается на ходу - это одна из причин падения при выходе."""
+        self._stop_scan()
+        self._resize_timer.stop()
+        super().closeEvent(event)
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
@@ -970,8 +977,21 @@ def main():
     window.show()
     if st.prefs.remember_folder and st.prefs.last_folder and Path(st.prefs.last_folder).is_dir():
         window.load_folder(st.prefs.last_folder)
-    sys.exit(app.exec())
+
+    code = app.exec()
+
+    # Аккуратное завершение: удаляем окно, пока QApplication ещё жив.
+    # Без этого PySide6 на macOS падает в самом конце работы (SIGSEGV в ~QObject).
+    window.close()
+    window.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.processEvents()
+    return code
 
 
 if __name__ == "__main__":
-    main()
+    _code = main()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # Пропускаем финализацию Python: она и рушит Qt на выходе. Данные уже сохранены.
+    os._exit(_code)
