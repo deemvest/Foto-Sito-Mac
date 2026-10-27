@@ -1,0 +1,4 @@
+APP_NAME = "Фото-Сито"
+APP_VERSION = "1.1"
+APP_AUTHOR = "deemvest"
+APP_TITLE = f"{APP_NAME} от {APP_AUTHOR} v{APP_VERSION}"
