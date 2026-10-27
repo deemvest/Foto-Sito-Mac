@@ -11,9 +11,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest        # Apple Silicon (M1/M2/M3)
+          - os: macos-latest
             arch: arm64
-          - os: macos-15-intel      # Intel
+          - os: macos-15-intel
             arch: x86_64
     runs-on: ${{ matrix.os }}
     steps:
@@ -22,6 +22,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Check local modules
+        run: |
+          missing=0
+          for f in main.py viewer.py xmp_manager.py platform_utils.py filters.py \
+                   settings.py settings_dialog.py thumb_cache.py exif_info.py version.py \
+                   requirements.txt FotoSito-mac.spec; do
+            if [ ! -f "$f" ]; then echo "НЕТ ФАЙЛА: $f"; missing=1; fi
+          done
+          for d in assets exiftool_mac .github; do
+            if [ ! -d "$d" ]; then echo "НЕТ ПАПКИ: $d"; missing=1; fi
+          done
+          if [ ! -f exiftool_mac/lib/Image/ExifTool.pm ]; then
+            echo "НЕТ ФАЙЛА: exiftool_mac/lib/Image/ExifTool.pm"; missing=1
+          fi
+          exit $missing
 
       - name: Install dependencies
         run: |
