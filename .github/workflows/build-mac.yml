@@ -67,12 +67,53 @@ jobs:
       - name: Build app
         run: pyinstaller --noconfirm FotoSito-mac.spec
 
+      # ---------- Упаковка ----------
+      # Делаем два формата сразу:
+      #   zip - для себя, быстрая проверка, меньше движений
+      #   dmg - для людей: окно с иконкой и стрелкой на "Программы"
+      # Карантин macOS вешает и на zip, и на dmg, поэтому первый запуск
+      # в обоих случаях требует правого клика (или xattr -cr).
+      # Подпись и нотаризация сюда не входят - для них нужен
+      # платный Apple Developer Program.
+
       - name: Zip app
         run: |
           cd dist
           ditto -c -k --keepParent FotoSito.app ../FotoSito-${{ matrix.arch }}.zip
 
+      - name: Build DMG
+        run: |
+          rm -rf dmg_root
+          mkdir -p dmg_root
+          cp -R dist/FotoSito.app dmg_root/
+          # Симлинк на /Applications - та самая папка-приёмник в окне DMG.
+          # Без него пользователь не поймёт, куда тащить приложение.
+          ln -s /Applications dmg_root/Applications
+          hdiutil create \
+            -volname "FotoSito" \
+            -srcfolder dmg_root \
+            -ov \
+            -format UDZO \
+            "FotoSito-${{ matrix.arch }}.dmg"
+
+      - name: Check packages
+        run: |
+          # Страховка от "зелёной галочки при пустом файле":
+          # приложение весит десятки мегабайт, образ - тем более.
+          ls -lh FotoSito-${{ matrix.arch }}.zip FotoSito-${{ matrix.arch }}.dmg
+          for f in FotoSito-${{ matrix.arch }}.zip FotoSito-${{ matrix.arch }}.dmg; do
+            size=$(stat -f%z "$f")
+            if [ "$size" -lt 10000000 ]; then
+              echo "ПОДОЗРИТЕЛЬНО МАЛО: $f ($size байт)"
+              exit 1
+            fi
+          done
+          # Проверяем, что образ целый и монтируется
+          hdiutil verify FotoSito-${{ matrix.arch }}.dmg
+
       - uses: actions/upload-artifact@v4
         with:
           name: FotoSito-${{ matrix.arch }}
-          path: FotoSito-${{ matrix.arch }}.zip
+          path: |
+            FotoSito-${{ matrix.arch }}.zip
+            FotoSito-${{ matrix.arch }}.dmg
